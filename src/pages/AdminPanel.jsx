@@ -1,31 +1,42 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-function AdminPanel() {
-    const [users, setUsers] = useState([]);
+const AdminPanel = () => {
+    const [role, setRole] = useState(null);
     const [posts, setPosts] = useState([]);
+    const [users, setUsers] = useState([]);
+    const navigate = useNavigate();
 
     useEffect(() => {
-        fetchUsers();
-        fetchPosts();
-    }, []);
+        const token = localStorage.getItem("token");
 
-    const token = localStorage.getItem("token");
-
-    // Fetch Users
-    const fetchUsers = async () => {
-        try {
-            const response = await axios.get("http://localhost:8080/admin/users", {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            setUsers(response.data);
-        } catch (error) {
-            console.error("Error fetching users:", error);
+        if (!token) {
+            alert("Unauthorized: Please log in.");
+            navigate("/login");
+            return;
         }
-    };
 
-    // Fetch Posts
-    const fetchPosts = async () => {
+        axios.get("http://localhost:8080/auth/me", {
+            headers: { Authorization: `Bearer ${token}` }
+        }).then((res) => {
+            setRole(res.data.role.trim());
+            if (res.data.role !== "ROLE_ADMIN") {
+                alert("Access Denied: You are not an admin.");
+                navigate("/");
+            } else {
+                fetchPosts(token);
+                fetchUsers(token);
+            }
+        }).catch((err) => {
+            console.error("Error fetching user role:", err);
+            alert("Authentication error. Please log in again.");
+            navigate("/login");
+        });
+
+    }, [navigate]);
+
+    const fetchPosts = async (token) => {
         try {
             const response = await axios.get("http://localhost:8080/admin/posts", {
                 headers: { Authorization: `Bearer ${token}` },
@@ -36,100 +47,71 @@ function AdminPanel() {
         }
     };
 
-    // Promote User to ADMIN
-    const promoteUser = async (userId) => {
+    const fetchUsers = async (token) => {
         try {
-            await axios.put(`http://localhost:8080/admin/users/${userId}/promote`, {}, {
+            const response = await axios.get("http://localhost:8080/admin/users", {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            fetchUsers(); // Refresh user list
+            setUsers(response.data);
         } catch (error) {
-            console.error("Error promoting user:", error);
+            console.error("Error fetching users:", error);
         }
     };
 
-    // Delete User
-    const deleteUser = async (userId) => {
-        try {
-            await axios.delete(`http://localhost:8080/admin/users/${userId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            fetchUsers(); // Refresh user list
-        } catch (error) {
-            console.error("Error deleting user:", error);
-        }
-    };
-
-    // Delete Post
     const deletePost = async (postId) => {
+        const token = localStorage.getItem("token");
         try {
             await axios.delete(`http://localhost:8080/admin/posts/${postId}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            fetchPosts(); // Refresh post list
+            setPosts(posts.filter(post => post.id !== postId));
         } catch (error) {
             console.error("Error deleting post:", error);
         }
     };
 
+    const deleteUser = async (userId) => {
+        const token = localStorage.getItem("token");
+        try {
+            await axios.delete(`http://localhost:8080/admin/users/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setUsers(users.filter(user => user.id !== userId));
+        } catch (error) {
+            console.error("Error deleting user:", error);
+        }
+    };
+
+    if (role !== "ROLE_ADMIN") {
+        return null;
+    }
+
     return (
-        <div className="admin-panel">
+        <div>
             <h2>Admin Panel</h2>
+            <p>Welcome, Admin! You can manage users and posts here.</p>
 
-            {/* Users Table */}
-            <h3>Users</h3>
-            <table className="admin-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Username</th>
-                        <th>Role</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {users.map((user) => (
-                        <tr key={user.id}>
-                            <td>{user.id}</td>
-                            <td>{user.username}</td>
-                            <td>{user.role}</td>
-                            <td>
-                                {user.role !== "ADMIN" && (
-                                    <button className="promote-btn" onClick={() => promoteUser(user.id)}>Promote</button>
-                                )}
-                                <button className="delete-btn" onClick={() => deleteUser(user.id)}>Delete</button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-
-            {/* Posts Table */}
             <h3>Posts</h3>
-            <table className="admin-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Title</th>
-                        <th>Author</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {posts.map((post) => (
-                        <tr key={post.id}>
-                            <td>{post.id}</td>
-                            <td>{post.title}</td>
-                            <td>{post.author.username}</td>
-                            <td>
-                                <button className="delete-btn" onClick={() => deletePost(post.id)}>Delete</button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <ul>
+                {posts.map(post => (
+                    <li key={post.id}>
+                        {post.title}{" "}
+                        <button style={{ color: "red" }} onClick={() => deletePost(post.id)}>❌ Delete</button>
+                    </li>
+                ))}
+            </ul>
+
+            <h3>Users</h3>
+            <ul>
+                {users.map(user => (
+                    <li key={user.id}>
+                        {user.username}{" "}
+                        <button style={{ color: "red" }} onClick={() => deleteUser(user.id)}>❌ Delete</button>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
-}
+};
 
 export default AdminPanel;
